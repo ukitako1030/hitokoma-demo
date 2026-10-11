@@ -1,0 +1,16 @@
+{
+  "id": "./",
+  "name": "ひとこま — 写真と、ひとこと。",
+  "short_name": "ひとこま",
+  "description": "写真とひとことを端末に残す、小さな写真日記。",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f4ed",
+  "theme_color": "#f6f4ed",
+  "icons": [
+    {"src":"./assets/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
+    {"src":"./assets/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ]
+}
