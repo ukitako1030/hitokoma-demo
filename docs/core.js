@@ -55,6 +55,31 @@ export const saveEntry = async entry => {
   const record=await serializeEntry(entry);
   return transaction('entries','readwrite',store=>store.put(record));
 };
+export async function saveDailyEntries(entries, replaceExisting = false) {
+  const dates = new Set(entries.map(entry => entry.date));
+  if (dates.size !== entries.length) throw new Error('同じ日の写真は1枚だけ選んでください。');
+  const records = [];
+  for (const entry of entries) records.push(await serializeEntry(entry));
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('entries', 'readwrite'), store = tx.objectStore('entries');
+    const request = store.getAll(); let failure;
+    request.onsuccess = () => {
+      const ids = new Set(records.map(record => record.id));
+      const conflicts = request.result.filter(record => dates.has(record.date) && !ids.has(record.id));
+      if (conflicts.length && !replaceExisting) {
+        failure = new Error('この日の記録が更新されました。もう一度保存して内容をご確認ください。'); tx.abort(); return;
+      }
+      try {
+        for (const record of conflicts) store.delete(record.id);
+        for (const record of records) store.put(record);
+      } catch (error) { failure = error; tx.abort(); }
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = event => reject(failure || tx.error || event.target.error);
+    tx.onabort = () => reject(failure || tx.error || new Error('保存が中断されました。元の記録は変更していません。'));
+  });
+}
 export const deleteEntry = id => transaction('entries','readwrite',store=>store.delete(id));
 export const readPreference = key => transaction('preferences','readonly',store=>store.get(key));
 export const writePreference = (key,value) => transaction('preferences','readwrite',store=>store.put(value,key));

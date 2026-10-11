@@ -1,7 +1,7 @@
-const CACHE = 'hitokoma-v1';
+const CACHE = 'hitokoma-v2';
 const SCOPE = new URL('./', self.location.href);
 const cacheName = `${CACHE}:${SCOPE.pathname}`;
-const assets = ['./','./index.html','./style.css','./app.js','./core.js','./manifest.webmanifest','./assets/icon.svg','./assets/icon-192.png','./assets/icon-512.png','./assets/cafe.jpg','./assets/walk.jpg','./assets/lunch.jpg','./assets/flowers.jpg','./assets/sea.jpg','./assets/reading.jpg'];
+const assets = ['./','./index.html','./style.css?v=2','./app.js?v=2','./core.js?v=2','./exif.js?v=2','./print.js?v=2','./studio.js?v=2','./manifest.webmanifest','./assets/icon.svg','./assets/icon-192.png','./assets/icon-512.png','./assets/cafe.jpg','./assets/walk.jpg','./assets/lunch.jpg','./assets/flowers.jpg','./assets/sea.jpg','./assets/reading.jpg'];
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(cacheName).then(cache=>cache.addAll(assets.map(path=>new URL(path,SCOPE).href))).then(()=>self.skipWaiting()));
 });

@@ -12,28 +12,28 @@
   <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./assets/icon-192.png">
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./style.css">
-  <script type="module" src="./app.js"></script>
+  <link rel="stylesheet" href="./style.css?v=2">
+  <script type="module" src="./app.js?v=2"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">日記へスキップ</a>
   <aside class="sidebar" aria-label="メインメニュー">
     <a class="brand" href="./" aria-label="ひとこま ホーム"><img src="./assets/icon.svg" width="38" height="38" alt=""><span>ひとこま<small>写真と、ひとこと。</small></span></a>
     <span class="demo-badge">デモ</span>
-    <nav class="desktop-nav"><button data-view="timeline" class="nav-button active"></button><button data-view="calendar" class="nav-button"></button></nav>
+    <nav class="desktop-nav"><button data-view="timeline" class="nav-button active"></button><button data-view="calendar" class="nav-button"></button><button data-action="print" class="nav-button"></button><button data-action="batch" class="nav-button">写真をまとめて記録</button></nav>
     <div class="sidebar-bottom"><p>今日のかけらを、<br>未来のわたしへ。</p><button class="nav-button" data-action="settings"></button><span class="local-note"></span></div>
   </aside>
   <header class="mobile-header"><a class="brand" href="./"><img src="./assets/icon.svg" width="31" height="31" alt=""><span>ひとこま</span></a><div><span class="demo-badge">デモ</span><button class="icon-button" data-action="settings" aria-label="設定"></button></div></header>
   <main id="main" tabindex="-1">
     <div class="page-top"><span class="eyebrow">MY LITTLE JOURNAL</span><span class="today-label" id="todayLabel"></span></div>
-    <section class="intro"><div><h1>何気ない今日を、<br>あとで宝物に。</h1><p>写真とひとこと。手帳に書く、その前に。</p></div><button class="primary desktop-record" data-action="create"></button><div class="intro-stamp" aria-hidden="true"><span>日々</span><small>のきろく</small></div></section>
+    <section class="intro"><div><h1>何気ない今日を、<br>あとで宝物に。</h1><p>写真とひとこと。ひと月分を、手帳に。</p></div><button class="primary desktop-record" data-action="create"></button><div class="intro-stamp" aria-hidden="true"><span>日々</span><small>のきろく</small></div></section>
     <div class="section-toolbar"><div class="view-title"><h2 id="viewTitle">日々のきろく</h2><span id="entryCount" class="count"></span></div><button class="icon-button search-toggle" data-action="search" aria-label="メモを検索" aria-expanded="false"></button></div>
     <div class="search-wrap" id="searchWrap" hidden><label for="searchInput" class="sr-only">メモのキーワード</label><span id="searchIcon" aria-hidden="true"></span><input id="searchInput" type="search" placeholder="メモの言葉で、あの日を探す" maxlength="200" autocomplete="off"><button class="text-button" data-action="clear-search">閉じる</button></div>
     <div class="sample-notice" id="sampleNotice"><span><i></i>サンプルの日記を表示しています</span><button data-action="hide-samples" class="text-button">非表示にする</button></div>
     <section id="content" aria-label="日記の一覧" aria-live="polite"><div class="loading-state">日記をひらいています…</div></section>
     <footer class="page-footer"><img src="./assets/icon.svg" width="24" height="24" alt=""><span>なんでもない日も、たいせつな一日。</span></footer>
   </main>
-  <nav class="mobile-nav" aria-label="メインメニュー"><button data-view="timeline" class="active"></button><button data-view="calendar"></button><button data-action="create" class="mobile-record"></button></nav>
+  <nav class="mobile-nav" aria-label="メインメニュー"><button data-view="timeline" class="active"></button><button data-view="calendar"></button><button data-action="print"></button><button data-action="create" class="mobile-record"></button></nav>
   <dialog id="modal" aria-labelledby="modalTitle"></dialog>
   <dialog id="confirmModal" class="confirm-modal" aria-labelledby="confirmTitle"></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

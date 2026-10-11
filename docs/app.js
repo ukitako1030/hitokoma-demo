@@ -1,4 +1,6 @@
-import {MAX_MEMO,dateKey,parseDate,validDate,readableError,allEntries,saveEntry,deleteEntry,readPreference,writePreference,normalizePhoto,makeBackup,parseBackup,importEntries} from './core.js';
+import {MAX_MEMO,dateKey,parseDate,validDate,readableError,allEntries,saveDailyEntries,deleteEntry,readPreference,writePreference,normalizePhoto,makeBackup,parseBackup,importEntries} from './core.js?v=2';
+import { mountPrint, mountBatch } from './studio.js?v=2';
+import { captureDate } from './exif.js?v=2';
 
 const paths={journal:'<path d="M4 4h13a3 3 0 0 1 3 3v14H7a3 3 0 0 1-3-3V4Z"/><path d="M4 17h16M8 4v13m4-9h4m-4 4h4"/>',calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18m-13 4h1m6 0h1m-8 3h1"/>',plus:'<path d="M12 5v14M5 12h14"/>',search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',settings:'<path d="m9 3-.7 2.3-2 .9-2.2-.5-2 3.5 1.5 1.8v2l-1.5 1.8 2 3.5 2.2-.5 2 .9L9 21h4l.7-2.3 2-.9 2.2.5 2-3.5-1.5-1.8v-2l1.5-1.8-2-3.5-2.2.5-2-.9L13 3Z"/><circle cx="11" cy="12" r="3"/>',lock:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4m-4 5v2"/>',close:'<path d="m6 6 12 12M6 18 18 6"/>',image:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.5"/><path d="m21 15-5-5-7 8-3-3-3 3"/>',edit:'<path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15v5Z"/>',trash:'<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/>',left:'<path d="m15 5-7 7 7 7"/>',right:'<path d="m9 5 7 7-7 7"/>',download:'<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',upload:'<path d="M12 16V4m-5 5 5-5 5 5M4 16v5h16v-5"/>',check:'<path d="m5 12 4 4L19 6"/>',leaf:'<path d="M20 3C7 2 2 7 4 15c7 7 16 1 16-12Z"/><path d="M3 21 15 9"/>'};
 const icon=name=>`<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name]||paths.journal}</svg>`;
@@ -20,12 +22,14 @@ const sampleDetails=[
 const samples=sampleDetails.map(([name,days,memo],index)=>{const d=parseDate(today);d.setDate(d.getDate()-days);return {id:`sample-${name}`,date:dateKey(d),memo,sample:true,url:`./assets/${name}.jpg`,createdAt:`2026-01-01T00:00:0${index}.000Z`};});
 const urls=new Map();
 const photoURL=entry=>{if(entry.sample)return entry.url;if(!urls.has(entry.id))urls.set(entry.id,URL.createObjectURL(entry.blob));return urls.get(entry.id);};
+let modalController=null;
 let editor=null, modalKind='', busy=false, toastTimer, confirmResolver=null, offlineReady=false;
 const modal=$('#modal'), confirmModal=$('#confirmModal');
 
 document.querySelectorAll('[data-view]').forEach(button=>{const view=button.dataset.view;button.innerHTML=icon(view==='timeline'?'journal':'calendar')+`<span>${view==='timeline'?'日々のきろく':'カレンダー'}</span>`;});
 document.querySelectorAll('[data-action="settings"]').forEach(button=>button.innerHTML=icon('settings')+(button.classList.contains('nav-button')?'<span>設定・バックアップ</span>':''));
 document.querySelectorAll('[data-action="create"]').forEach(button=>button.innerHTML=icon('plus')+'<span>記録する</span>');
+document.querySelectorAll('[data-action="print"]').forEach(button=>button.innerHTML=icon('download')+'<span>手帳にする</span>');
 $('.local-note').innerHTML=icon('lock')+'この端末だけに保存';
 $('.search-toggle').innerHTML=icon('search');$('#searchIcon').innerHTML=icon('search');
 $('#todayLabel').textContent=new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())+' のきろく';
@@ -51,20 +55,22 @@ function render(){
 }
 function calendar(entries){
   const [year,month]=state.month.split('-').map(Number), days=new Date(year,month,0).getDate(), first=new Date(year,month-1,1).getDay();
-  const counts=new Map();entries.forEach(e=>counts.set(e.date,(counts.get(e.date)||0)+1));
+  const counts=new Map(),covers=new Map();entries.forEach(e=>{counts.set(e.date,(counts.get(e.date)||0)+1);const cover=covers.get(e.date);if(!cover||(cover.sample&&!e.sample))covers.set(e.date,e);});
   let cells='<span></span>'.repeat(first);
-  for(let day=1;day<=days;day++){const key=`${state.month}-${String(day).padStart(2,'0')}`,count=counts.get(key)||0;cells+=`<button class="calendar-day${key===today?' today':''}${key===state.selectedDay?' selected':''}" data-action="select-day" data-date="${key}" aria-label="${month}月${day}日、${count?`記録${count}件`:'記録なし'}" aria-pressed="${key===state.selectedDay}"${key===today?' aria-current="date"':''}>${day}${count?'<span class="day-dot"></span>':''}</button>`;}
+  for(let day=1;day<=days;day++){const key=`${state.month}-${String(day).padStart(2,'0')}`,count=counts.get(key)||0,cover=covers.get(key);cells+=`<button class="calendar-day photo-day${cover?' has-photo':''}${key===today?' today':''}${key===state.selectedDay?' selected':''}" data-action="select-day" data-date="${key}" aria-label="${month}月${day}日、${count?`記録${count}件`:'記録なし'}" aria-pressed="${key===state.selectedDay}"${key===today?' aria-current="date"':''}><span class="calendar-date-number">${day}</span>${cover?`<img class="calendar-photo" src="${escape(photoURL(cover))}" alt="" loading="lazy"><span class="calendar-memo">${escape(cover.memo||'写真の記録')}</span>`:''}${count?'<span class="day-dot"></span>':''}</button>`;}
   const shown=entries.filter(e=>state.selectedDay?e.date===state.selectedDay:e.date.startsWith(state.month));
   return `<div class="calendar-box"><div class="calendar-header"><button class="icon-button" data-action="prev-month" aria-label="前の月" ${state.month==='1900-01'?'disabled':''}>${icon('left')}</button><h3><small>${year}年</small>${month}月</h3><button class="icon-button" data-action="next-month" aria-label="次の月" ${state.month==='2100-12'?'disabled':''}>${icon('right')}</button></div><div class="week-labels" aria-hidden="true">${['日','月','火','水','木','金','土'].map(d=>`<span>${d}</span>`).join('')}</div><div class="calendar-grid">${cells}</div><p class="calendar-key">${state.query?'検索に一致する':'記録のある'}日</p></div><h3 class="day-heading">${state.selectedDay?escape(fullDate(state.selectedDay)):`${month}月のきろく`}<span class="count">　${shown.length}こま</span></h3>${shown.length?`<div class="entries-grid">${shown.map(card).join('')}</div>`:empty(state.query?'search':state.selectedDay?'day':'month')}`;
 }
 function openModal(kind,title,body){
+  modalController?.destroy(); modalController=null;
+  modal.classList.toggle('studio-modal',kind==='print'||kind==='batch');
   modalKind=kind;modal.innerHTML=`<div class="modal-header"><h2 id="modalTitle" tabindex="-1">${title}</h2><button class="icon-button" data-action="close-modal" aria-label="閉じる">${icon('close')}</button></div>${body}`;
   if(!modal.open)modal.showModal();
   modal.scrollTop=0;$('#modalTitle').focus({preventScroll:true});
 }
 function discardEditor(){if(editor?.previewURL)URL.revokeObjectURL(editor.previewURL);editor=null;}
-function closeModal(){modal.close();discardEditor();modalKind='';}
-function isDirty(){return editor&&(editor.photoChanged||$('#memoInput')?.value!==editor.initialMemo||$('#dateInput')?.value!==editor.initialDate);}
+function closeModal(){modalController?.destroy();modalController=null;modal.close();discardEditor();modalKind='';}
+function isDirty(){if(modalController?.isDirty())return true;return editor&&(editor.photoChanged||$('#memoInput')?.value!==editor.initialMemo||$('#dateInput')?.value!==editor.initialDate);}
 async function requestClose(){if(busy){toast('処理が終わるまでお待ちください');return;}if(isDirty()&&!await confirmAction('編集中の内容を閉じますか？','まだ保存されていない内容は失われます。','保存せず閉じる',true))return;closeModal();}
 function confirmAction(title,message,label,danger=false){
   return new Promise(resolve=>{confirmResolver=resolve;confirmModal.innerHTML=`<h2 id="confirmTitle">${escape(title)}</h2><p>${escape(message)}</p><div class="confirm-actions"><button class="secondary" data-confirm="no" autofocus>キャンセル</button><button class="primary${danger?' danger-button':''}" data-confirm="yes">${escape(label)}</button></div>`;confirmModal.showModal();});
@@ -80,7 +86,7 @@ async function showEditor(id=null,initialDate=today){
   if(busy)return;
   const entry=id?findEntry(id):null;discardEditor();
   editor={id:entry&&!entry.sample?entry.id:null,blob:entry?.blob||null,initialMemo:entry?.memo||'',initialDate:entry?.date||initialDate,photoChanged:false,previewURL:null,createdAt:entry?.createdAt};
-  openModal('editor',entry&&!entry.sample?'ひとこまを編集':'今日のひとこま',`<form id="entryForm" class="modal-body"><p class="modal-subtitle">${entry?.sample?'サンプルをもとに、自分の記録として保存できます。':'忘れたくない瞬間を、ひとつ。'}</p><label class="photo-picker" id="photoPicker">${entry?`<img src="${escape(photoURL(entry))}" alt="選択した写真"><span class="change-photo">写真を選び直す</span>`:`${icon('image')}<strong>写真を選ぶ</strong><small>お気に入りの一枚を、ここに。</small>`}<input type="file" id="photoInput" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/avif" aria-label="写真を選ぶ"></label><label class="field"><span class="field-label">${icon('calendar')}日付</span><input type="date" id="dateInput" value="${escape(editor.initialDate)}" min="1900-01-01" max="2100-12-31" required></label><label class="field"><span class="field-label">ひとことメモ<small>空欄でも保存できます</small></span><textarea id="memoInput" rows="4" maxlength="${MAX_MEMO}" placeholder="どんな一日でしたか？">${escape(editor.initialMemo)}</textarea><span class="field-count" id="memoCount">${editor.initialMemo.length} / ${MAX_MEMO}</span></label><p class="form-error" id="editorError" role="alert" hidden></p><button class="primary full-width" type="submit" id="saveButton">${icon('check')}このひとこまを保存</button><p class="editor-note">${icon('lock')}写真とメモは、この端末だけに保存されます</p></form>`);
+  openModal('editor',entry&&!entry.sample?'ひとこまを編集':'今日のひとこま',`<form id="entryForm" class="modal-body"><p class="modal-subtitle">${entry?.sample?'サンプルをもとに、自分の記録として保存できます。':'忘れたくない瞬間を、ひとつ。'}</p><button type="button" class="batch-entry-link text-button" data-action="batch">何日分か、まとめて記録する →</button><label class="photo-picker" id="photoPicker">${entry?`<img src="${escape(photoURL(entry))}" alt="選択した写真"><span class="change-photo">写真を選び直す</span>`:`${icon('image')}<strong>写真を選ぶ</strong><small>お気に入りの一枚を、ここに。</small>`}<input type="file" id="photoInput" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/avif" aria-label="写真を選ぶ"></label><label class="field"><span class="field-label">${icon('calendar')}日付</span><input type="date" id="dateInput" value="${escape(editor.initialDate)}" min="1900-01-01" max="2100-12-31" required></label><label class="field"><span class="field-label">ひとことメモ<small>空欄でも保存できます</small></span><textarea id="memoInput" rows="4" maxlength="${MAX_MEMO}" placeholder="どんな一日でしたか？">${escape(editor.initialMemo)}</textarea><span class="field-count" id="memoCount">${editor.initialMemo.length} / ${MAX_MEMO}</span></label><p class="form-error" id="editorError" role="alert" hidden></p><button class="primary full-width" type="submit" id="saveButton">${icon('check')}このひとこまを保存</button><p class="photo-date-note" id="photoDateNote" role="status"></p><p class="editor-note">${icon('lock')}写真とメモは、この端末だけに保存されます</p></form>`);
   $('#photoInput').addEventListener('change',choosePhoto);
   $('#memoInput').addEventListener('input',()=>$('#memoCount').textContent=`${$('#memoInput').value.length} / ${MAX_MEMO}`);
   $('#entryForm').addEventListener('submit',saveForm);
@@ -93,7 +99,7 @@ function editorError(message){$('#editorError').hidden=false;$('#editorError').t
 function setEditorBusy(value,label='保存中…'){busy=value;$('#saveButton').disabled=value;$('#photoInput').disabled=value;$('#dateInput').disabled=value;$('#memoInput').disabled=value;$('#saveButton').innerHTML=value?`<span class="spinner" aria-hidden="true"></span>${label}`:icon('check')+'このひとこまを保存';}
 async function choosePhoto(event){
   const file=event.target.files?.[0];if(!file)return;setEditorBusy(true,'写真を準備中…');$('#editorError').hidden=true;
-  try{const blob=await normalizePhoto(file);if(editor.previewURL)URL.revokeObjectURL(editor.previewURL);editor.blob=blob;editor.previewURL=URL.createObjectURL(blob);editor.photoChanged=true;const input=$('#photoInput');$('#photoPicker').innerHTML=`<img src="${editor.previewURL}" alt="選択した写真"><span class="change-photo">写真を選び直す</span>`;$('#photoPicker').append(input);}catch(error){editorError(readableError(error));}finally{event.target.value='';setEditorBusy(false);}
+  try{const captured=await captureDate(file);const blob=await normalizePhoto(file);if(captured&&!editor.id){$('#dateInput').value=captured;$('#photoDateNote').textContent='撮影日（'+captured.replaceAll('-', '/')+'）を設定しました。変更もできます。';}else{$('#photoDateNote').textContent=captured?'撮影日：'+captured.replaceAll('-', '/'):'撮影日を読み取れませんでした。日付をご確認ください。';}if(editor.previewURL)URL.revokeObjectURL(editor.previewURL);editor.blob=blob;editor.previewURL=URL.createObjectURL(blob);editor.photoChanged=true;const input=$('#photoInput');$('#photoPicker').innerHTML=`<img src="${editor.previewURL}" alt="選択した写真"><span class="change-photo">写真を選び直す</span>`;$('#photoPicker').append(input);}catch(error){editorError(readableError(error));}finally{event.target.value='';setEditorBusy(false);}
 }
 async function saveForm(event){
   event.preventDefault();if(busy)return;
@@ -101,13 +107,17 @@ async function saveForm(event){
   const date=$('#dateInput').value,memo=$('#memoInput').value.trim();
   if(!validDate(date)){editorError('1900年〜2100年の正しい日付を選んでください。');return;}
   if(memo.length>MAX_MEMO){editorError(`メモは${MAX_MEMO}文字以内にしてください。`);return;}
+  setEditorBusy(true);
+  try{state.entries=await allEntries();}catch(error){editorError(readableError(error));setEditorBusy(false);return;}
+  const conflicts=state.entries.filter(e=>e.date===date&&e.id!==editor.id);
+  if(conflicts.length&&!await confirmAction('この日の記録を置き換えますか？','1日1枚で残します。保存済みの写真とメモを、編集中の内容に置き換えます。','置き換えて保存')){setEditorBusy(false);return;}
   setEditorBusy(true);$('#editorError').hidden=true;
   try{
     const now=new Date().toISOString(),isEdit=Boolean(editor.id);
     const entry={id:editor.id||crypto.randomUUID(),date,memo,blob:editor.blob,createdAt:editor.createdAt||now,updatedAt:now};
-    await saveEntry(entry);
+    await saveDailyEntries([entry],conflicts.length>0);
     if(urls.has(entry.id)){URL.revokeObjectURL(urls.get(entry.id));urls.delete(entry.id);}
-    const index=state.entries.findIndex(e=>e.id===entry.id);if(index<0)state.entries.push(entry);else state.entries[index]=entry;
+    state.entries=await allEntries();
     busy=false;closeModal();state.query='';$('#searchInput').value='';state.month=date.slice(0,7);state.selectedDay=date;render();toast(isEdit?'ひとこまを更新しました':'ひとこまを保存しました');
     if(navigator.storage?.persist)navigator.storage.persist().catch(()=>{});
   }catch(error){editorError(readableError(error));setEditorBusy(false);}
@@ -150,6 +160,24 @@ async function restoreBackup(event){
   }catch(error){backupError(readableError(error));$('#backupStatus').textContent='';}finally{event.target.value='';setBackupBusy(false);}
 }
 
+
+function showPrint(){
+  discardEditor();openModal('print','手帳にする','<div id="printStudio"></div>');
+  modalController=mountPrint($('#printStudio'),{entries:state.entries,sampleEntries:samples.filter(e=>!state.hiddenSamples.includes(e.id)),includeSamples:state.samples,photoURL,notify:toast,setBusy:value=>{busy=value;}});
+}
+function showBatch(){
+  discardEditor();openModal('batch','写真をまとめて記録','<div id="batchStudio"></div>');
+  modalController=mountBatch($('#batchStudio'),{setBusy:value=>{busy=value;},notify:toast,initialDate:state.view==='calendar'&&state.selectedDay?state.selectedDay:today,save:async photos=>{
+    const current=await allEntries(), dates=new Set(photos.map(photo=>photo.date));
+    const conflicts=current.filter(entry=>dates.has(entry.date));
+    if(conflicts.length&&!await confirmAction('保存済みの記録を置き換えますか？',`${new Set(conflicts.map(e=>e.date)).size}日分は、すでに記録があります。選んだ写真とメモに置き換えます。`,'置き換えて保存'))return false;
+    const now=new Date().toISOString();
+    const records=photos.map(photo=>({...photo,id:crypto.randomUUID(),createdAt:now,updatedAt:now}));
+    await saveDailyEntries(records,conflicts.length>0);state.entries=await allEntries();
+    busy=false;closeModal();state.query='';$('#searchInput').value='';state.view='timeline';render();return true;
+  }});
+}
+
 document.addEventListener('click',async event=>{
   const target=event.target.closest('[data-action],[data-view]');if(!target||target.disabled)return;
   if(target.dataset.view){state.view=target.dataset.view;render();window.scrollTo({top:0,behavior:'instant'});return;}
@@ -162,6 +190,8 @@ document.addEventListener('click',async event=>{
     case 'edit':showEditor(target.dataset.id);break;
     case 'delete':await removeRecord(target.dataset.id);break;
     case 'settings':showSettings();break;
+    case 'print':showPrint();break;
+    case 'batch':if(isDirty()&&!await confirmAction('まとめて記録に切り替えますか？','編集中の内容は保存されません。','切り替える'))break;showBatch();break;
     case 'close-modal':await requestClose();break;
     case 'hide-samples':await setSamples(false);break;
     case 'search':$('#searchWrap').hidden=!$('#searchWrap').hidden;$('.search-toggle').setAttribute('aria-expanded',String(!$('#searchWrap').hidden));if(!$('#searchWrap').hidden)$('#searchInput').focus();else{state.query='';$('#searchInput').value='';render();}break;
